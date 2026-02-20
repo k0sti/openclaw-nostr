@@ -3,7 +3,9 @@
  * Single relay, single connection. Proven pattern from test-auth-v3.ts.
  */
 import { Relay } from "nostr-tools/relay";
-import WebSocketImpl from "ws";
+// Use require for ws to ensure Node.js resolves it correctly
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const WebSocketImpl = require("ws");
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { decode as nip19decode } from "nostr-tools/nip19";
 import type { Event } from "nostr-tools/pure";
