@@ -163,7 +163,7 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
               botName: account.name,
             });
             ctx.log?.debug?.(
-              `[${aid}] Mention check group=${groupId}: pTag=${result.pTag} text=${result.textHex || result.textBech32} name=${result.name}`,
+              `[${aid}] Mention check group=${groupId}: pTag=${result.pTag} text=${result.textHex || result.textBech32} name=${result.name} content="${event.content.slice(0, 80)}" botName=${account.name}`,
             );
             if (!result.mentioned) return;
           }
