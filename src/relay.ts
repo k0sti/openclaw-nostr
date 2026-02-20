@@ -74,8 +74,19 @@ export async function connectRelay(opts: RelayOptions): Promise<RelayHandle> {
   };
 
   // Wait for auth to complete (up to 5s, check every 100ms)
+  // Also check relay.challenge in case it arrives late
   for (let i = 0; i < 50 && !authDone; i++) {
     await new Promise((r) => setTimeout(r, 100));
+    // Challenge might arrive after connect — try auth if we see it
+    if (!authDone && relay.challenge) {
+      try {
+        await relay.auth();
+        authDone = true;
+      } catch (e) {
+        opts.onError?.(e as Error, "auth-poll");
+        authDone = true;
+      }
+    }
   }
   if (!authDone) {
     opts.onError?.(new Error("AUTH timeout — proceeding without auth"), "auth-timeout");
