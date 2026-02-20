@@ -3,6 +3,7 @@
  * Single relay, single connection. Proven pattern from test-auth-v3.ts.
  */
 import { Relay } from "nostr-tools/relay";
+import WebSocketImpl from "ws";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { decode as nip19decode } from "nostr-tools/nip19";
 import type { Event } from "nostr-tools/pure";
@@ -45,7 +46,9 @@ export async function connectRelay(opts: RelayOptions): Promise<RelayHandle> {
   const sk = decodeNsec(opts.nsec);
   const pk = getPublicKey(sk);
 
-  const relay = await Relay.connect(opts.relayUrl);
+  const relay = await Relay.connect(opts.relayUrl, {
+    websocketImplementation: WebSocketImpl as any,
+  });
 
   // Patch relay.auth immediately to inject our signer (proven pattern)
   const origAuth = relay.auth.bind(relay);
