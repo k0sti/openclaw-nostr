@@ -61,17 +61,25 @@ export async function connectRelay(opts: RelayOptions): Promise<RelayHandle> {
     }
   }
 
-  // Handle future auth challenges
+  // Handle future auth challenges + track auth completion
+  let authDone = !!relay.challenge; // if we already authed above
   relay.onauth = async () => {
     try {
       await relay.auth();
+      authDone = true;
     } catch (e) {
       opts.onError?.(e as Error, "auth-onauth");
+      authDone = true; // proceed even on error
     }
   };
 
-  // Wait for auth to settle
-  await new Promise((r) => setTimeout(r, 2000));
+  // Wait for auth to complete (up to 5s, check every 100ms)
+  for (let i = 0; i < 50 && !authDone; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  if (!authDone) {
+    opts.onError?.(new Error("AUTH timeout — proceeding without auth"), "auth-timeout");
+  }
 
   // Subscribe to NIP-29 group messages
   const since = opts.since ?? Math.floor(Date.now() / 1000);
