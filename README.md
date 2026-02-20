@@ -57,6 +57,30 @@ Add the following block to your OpenClaw config under `channels`:
 | `groupAllowFrom` | string[] | `["*"]` | Hex pubkeys allowed to trigger the bot, or `["*"]` for all |
 | `groupRequireMention` | boolean | `true` | Require the bot to be mentioned before responding |
 
+## CLI: Send Messages from Any Context
+
+The `bin/nostr-send.ts` script sends messages to NIP-29 groups from any context (shell, cron, other bots). This bypasses OpenClaw's cross-context message restrictions.
+
+```bash
+# Basic usage
+bun run bin/nostr-send.ts <group> <message>
+
+# Examples
+bun run bin/nostr-send.ts techteam "Hello from Telegram!"
+bun run bin/nostr-send.ts general "Scheduled alert: deploy complete"
+
+# Override relay
+NOSTR_RELAY=wss://other-relay.example.com bun run bin/nostr-send.ts dev "test"
+```
+
+### Config
+
+The script reads the bot's secret key from (in order):
+1. `NOSTR_NSEC` environment variable
+2. `~/openclaw/.secrets/nostr.json` (`{"nsec": "nsec1..."}`)
+
+Relay defaults to `wss://zooid.atlantislabs.space`. Override with `NOSTR_RELAY`.
+
 ## Architecture
 
 ### Inbound Flow
@@ -125,6 +149,8 @@ openclaw-nostr/
   openclaw.plugin.json     # Plugin manifest
   index.ts                 # Plugin entry point (register + runtime setup)
   package.json
+  bin/
+    nostr-send.ts          # Standalone CLI for sending NIP-29 group messages
   src/
     plugin.ts              # ChannelPlugin implementation
     relay.ts               # Relay connection, NIP-42 AUTH, NIP-29 subscription
