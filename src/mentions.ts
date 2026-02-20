@@ -5,6 +5,7 @@
  */
 import { decode as nip19decode } from "nostr-tools/nip19";
 
+/** Input parameters for mention detection. */
 export interface MentionCheckParams {
   /** Event tags */
   tags: string[][];
@@ -16,6 +17,7 @@ export interface MentionCheckParams {
   botName?: string;
 }
 
+/** Result of mention detection, with flags for each detection method. */
 export interface MentionResult {
   mentioned: boolean;
   pTag: boolean;

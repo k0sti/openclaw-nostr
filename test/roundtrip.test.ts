@@ -5,10 +5,8 @@
 import { describe, test, expect } from "bun:test";
 import { connectRelay, decodeNsec } from "../src/relay";
 import { checkMention } from "../src/mentions";
-import { getPublicKey } from "nostr-tools/pure";
-import { generateSecretKey } from "nostr-tools/pure";
+import { getPublicKey, generateSecretKey, finalizeEvent } from "nostr-tools/pure";
 import { Relay } from "nostr-tools/relay";
-import { finalizeEvent } from "nostr-tools/pure";
 import { npubEncode } from "nostr-tools/nip19";
 
 const RELAY_URL = "wss://zooid.atlantislabs.space";

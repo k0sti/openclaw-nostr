@@ -16,6 +16,7 @@ const KIND_GROUP_THREAD_ROOT = 11;
 const KIND_GROUP_THREAD_REPLY = 12;
 export const GROUP_KINDS = [KIND_GROUP_CHAT, KIND_GROUP_THREAD_ROOT, KIND_GROUP_THREAD_REPLY];
 
+/** Options for connecting to a NIP-29 relay. */
 export interface RelayOptions {
   relayUrl: string;
   nsec: string;
@@ -27,10 +28,10 @@ export interface RelayOptions {
   since?: number;
 }
 
+/** Handle returned by connectRelay, providing publish and cleanup methods. */
 export interface RelayHandle {
   relay: Relay;
   publicKey: string;
-  secretKey: Uint8Array;
   close: () => void;
   publish: (event: Event) => Promise<void>;
   sendGroupMessage: (groupId: string, text: string) => Promise<Event>;
@@ -132,7 +133,6 @@ export async function connectRelay(opts: RelayOptions): Promise<RelayHandle> {
   return {
     relay,
     publicKey: pk,
-    secretKey: sk,
     close: () => {
       sub.close();
       relay.close();

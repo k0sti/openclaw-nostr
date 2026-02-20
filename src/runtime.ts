@@ -13,10 +13,12 @@
 // The bundled nostr plugin does the same pattern.
 let _runtime: any = null;
 
+/** Store the PluginRuntime reference (call from register()). */
 export function setPluginRuntime(runtime: any): void {
   _runtime = runtime;
 }
 
+/** Retrieve the stored PluginRuntime (call from startAccount()). */
 export function getPluginRuntime(): any {
   if (!_runtime) {
     throw new Error(

@@ -13,6 +13,7 @@ import type { NostrNip29Account } from "./types.js";
 // Active relay handle per account
 const activeHandles = new Map<string, RelayHandle>();
 
+/** ChannelPlugin implementation for NIP-29 group chats on Nostr relays. */
 export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
   id: "nostr-nip29",
 
@@ -59,10 +60,7 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
   },
 
   messaging: {
-    normalizeTarget: (target) => {
-      if (target.startsWith("group:")) return target;
-      return target;
-    },
+    normalizeTarget: (target) => target,
     targetResolver: {
       looksLikeId: (input) => input.trim().startsWith("group:"),
       hint: "<group:groupId>",
@@ -74,9 +72,6 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
     textChunkLimit: 4000,
     sendText: async ({ to, text, accountId }) => {
       const aid = accountId ?? "default";
-      console.log(
-        `[nostr-nip29:outbound] sendText called — to=${to} accountId=${aid} textLen=${text?.length ?? 0}`,
-      );
       const handle = activeHandles.get(aid);
       if (!handle) {
         throw new Error(`NIP-29 relay not connected for account ${aid}`);
@@ -85,17 +80,11 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
         throw new Error(`NIP-29 outbound only supports group targets, got: ${to}`);
       }
       const groupId = to.slice("group:".length);
-      console.log(
-        `[nostr-nip29:outbound] Publishing kind 9 to group=${groupId}`,
-      );
-      await handle.sendGroupMessage(groupId, text ?? "");
-      console.log(
-        `[nostr-nip29:outbound] Published successfully to group=${groupId}`,
-      );
+      const event = await handle.sendGroupMessage(groupId, text ?? "");
       return {
         channel: "nostr-nip29" as const,
         to,
-        messageId: `nip29-${Date.now()}`,
+        messageId: event.id,
       };
     },
   },
@@ -112,9 +101,11 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
 
       ctx.log?.info(`[${aid}] Starting NIP-29 gateway (pubkey: ${account.publicKey})`);
 
-      if (!account.configured) {
+      if (!account.configured || !account.publicKey) {
         throw new Error("NIP-29: privateKey or relay not configured");
       }
+      // After this guard, publicKey is guaranteed non-null
+      const botPubkey = account.publicKey;
 
       if (account.groups.length === 0) {
         ctx.log?.warn(`[${aid}] No groups configured — gateway will idle`);
@@ -136,8 +127,7 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
         finalizeInboundContext,
         dispatchReplyWithBufferedBlockDispatcher,
       } = pluginRuntime.channel.reply;
-      const { recordInboundSession } = pluginRuntime.channel.session;
-      const { resolveStorePath } = pluginRuntime.channel.session;
+      const { recordInboundSession, resolveStorePath } = pluginRuntime.channel.session;
 
       const handle = await connectRelay({
         relayUrl: account.relay,
@@ -146,7 +136,7 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
         since: Math.floor(Date.now() / 1000),
         onEvent: async (event, groupId) => {
           // Skip own messages
-          if (event.pubkey === account.publicKey) return;
+          if (event.pubkey === botPubkey) return;
 
           const text = event.content;
 
@@ -155,17 +145,19 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
           const requireMention =
             groupCfg?.mentionOnly ?? account.groupRequireMention;
 
+          let wasMentioned = false;
           if (requireMention) {
             const result = checkMention({
               tags: event.tags,
               text,
-              botPubkey: account.publicKey!,
+              botPubkey,
               botName: account.name,
             });
             ctx.log?.debug?.(
               `[${aid}] Mention check group=${groupId}: pTag=${result.pTag} text=${result.textHex || result.textBech32} name=${result.name} content="${event.content.slice(0, 80)}" botName=${account.name}`,
             );
             if (!result.mentioned) return;
+            wasMentioned = true;
           }
 
           // Allowlist check
@@ -213,7 +205,7 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
             SenderId: event.pubkey,
             Provider: "nostr-nip29",
             Surface: "nostr-nip29",
-            WasMentioned: true,
+            WasMentioned: wasMentioned,
             MessageSid: event.id,
             Timestamp: event.created_at ? event.created_at * 1000 : undefined,
             CommandAuthorized: true,

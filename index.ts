@@ -13,8 +13,8 @@ const plugin = {
   configSchema: emptyPluginConfigSchema(),
   register(api: OpenClawPluginApi) {
     // Store api.runtime (PluginRuntime) so the gateway can use it for
-    // handleInboundMessage — ctx.runtime (RuntimeEnv) lacks the full
-    // channel-reply dispatch layer needed for outbound routing.
+    // dispatchReplyWithBufferedBlockDispatcher — ctx.runtime (RuntimeEnv)
+    // lacks the full channel-reply dispatch layer needed for outbound routing.
     setPluginRuntime(api.runtime);
     api.registerChannel({ plugin: nostrNip29Plugin });
   },
