@@ -129,11 +129,21 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
       // causes replies to fall through to the default channel.
       const pluginRuntime = getPluginRuntime();
 
+      // Destructure SDK functions from PluginRuntime
+      const { loadConfig } = pluginRuntime.config;
+      const { resolveAgentRoute } = pluginRuntime.channel.routing;
+      const {
+        finalizeInboundContext,
+        dispatchReplyWithBufferedBlockDispatcher,
+      } = pluginRuntime.channel.reply;
+      const { recordInboundSession } = pluginRuntime.channel.session;
+      const { resolveStorePath } = pluginRuntime.channel.session;
+
       const handle = await connectRelay({
         relayUrl: account.relay,
         nsec: account.privateKey,
         groups: groupIds,
-        since: 0, // only new events
+        since: Math.floor(Date.now() / 1000),
         onEvent: async (event, groupId) => {
           // Skip own messages
           if (event.pubkey === account.publicKey) return;
@@ -171,30 +181,101 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
             `[${aid}] Inbound from ${event.pubkey.slice(0, 8)} in group ${groupId}`,
           );
 
-          // Forward to OpenClaw message pipeline via PluginRuntime.
-          // Must use pluginRuntime.channel.reply (not ctx.runtime) so
-          // the reply routes through our outbound adapter.
-          ctx.log?.debug?.(
-            `[${aid}] Dispatching to handleInboundMessage: channel=nostr-nip29 chatId=group:${groupId} sender=${event.pubkey.slice(0, 8)}`,
-          );
-          await (
-            pluginRuntime.channel.reply as {
-              handleInboundMessage?: (params: unknown) => Promise<void>;
-            }
-          ).handleInboundMessage?.({
+          // --- Proper SDK inbound flow ---
+          // 1. Load config & resolve agent route
+          const cfg = loadConfig();
+          const nostrTo = `group:${groupId}`;
+          const route = resolveAgentRoute({
+            cfg,
             channel: "nostr-nip29",
             accountId: aid,
-            senderId: event.pubkey,
-            chatType: "group",
-            chatId: `group:${groupId}`,
-            text,
-            reply: async (responseText: string) => {
-              ctx.log?.debug?.(
-                `[${aid}] Reply callback invoked for group ${groupId} (${responseText.length} chars)`,
+            peer: { kind: "group", id: groupId },
+          });
+
+          ctx.log?.debug?.(
+            `[${aid}] Resolved route: agent=${route.agentId} session=${route.sessionKey}`,
+          );
+
+          // 2. Build & finalize inbound context
+          const ctxPayload = finalizeInboundContext({
+            Body: text,
+            BodyForAgent: text,
+            RawBody: text,
+            CommandBody: text,
+            From: `nostr-nip29:group:${groupId}`,
+            To: nostrTo,
+            SessionKey: route.sessionKey,
+            AccountId: route.accountId,
+            ChatType: "group",
+            ConversationLabel: `nostr-nip29:${groupId}`,
+            GroupSubject: groupId,
+            SenderName: event.pubkey.slice(0, 8),
+            SenderId: event.pubkey,
+            Provider: "nostr-nip29",
+            Surface: "nostr-nip29",
+            WasMentioned: true,
+            MessageSid: event.id,
+            Timestamp: event.created_at ? event.created_at * 1000 : undefined,
+            CommandAuthorized: true,
+            OriginatingChannel: "nostr-nip29",
+            OriginatingTo: nostrTo,
+          });
+
+          // 3. Record inbound session
+          const storePath = resolveStorePath(undefined, {
+            agentId: route.agentId,
+          });
+          await recordInboundSession({
+            storePath,
+            sessionKey: route.sessionKey,
+            ctx: ctxPayload,
+            updateLastRoute: {
+              sessionKey: route.sessionKey,
+              channel: "nostr-nip29",
+              to: nostrTo,
+              accountId: route.accountId,
+            },
+            onRecordError: (err: unknown) => {
+              ctx.log?.warn?.(
+                `[${aid}] Failed updating session meta: ${String(err)}`,
               );
-              await handle.sendGroupMessage(groupId, responseText);
             },
           });
+
+          // 4. Dispatch reply through the proper SDK pipeline.
+          //    The deliver callback sends the agent's response back to the
+          //    Nostr group via our relay handle.  This replaces the broken
+          //    handleInboundMessage pattern.
+          ctx.log?.debug?.(
+            `[${aid}] Dispatching via dispatchReplyWithBufferedBlockDispatcher: session=${route.sessionKey}`,
+          );
+
+          try {
+            await dispatchReplyWithBufferedBlockDispatcher({
+              ctx: ctxPayload,
+              cfg,
+              dispatcherOptions: {
+                deliver: async (payload: any) => {
+                  const replyText: string =
+                    payload.text ?? payload.body ?? "";
+                  if (!replyText) return;
+                  ctx.log?.debug?.(
+                    `[${aid}] Delivering reply to group=${groupId} (${replyText.length} chars)`,
+                  );
+                  await handle.sendGroupMessage(groupId, replyText);
+                },
+                onError: (err: unknown) => {
+                  ctx.log?.error?.(
+                    `[${aid}] Reply dispatch error: ${String(err)}`,
+                  );
+                },
+              },
+            });
+          } catch (err) {
+            ctx.log?.error?.(
+              `[${aid}] dispatchReplyWithBufferedBlockDispatcher failed: ${String(err)}`,
+            );
+          }
         },
         onEose: () => {
           ctx.log?.debug?.(`[${aid}] EOSE received — subscribed to ${groupIds.length} group(s)`);
