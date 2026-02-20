@@ -7,6 +7,7 @@ import type { ChannelPlugin } from "openclaw/plugin-sdk";
 import { listAccountIds, resolveAccount } from "./config.js";
 import { connectRelay, type RelayHandle } from "./relay.js";
 import { checkMention } from "./mentions.js";
+import { getPluginRuntime } from "./runtime.js";
 import type { NostrNip29Account } from "./types.js";
 
 // Active relay handle per account
@@ -73,6 +74,9 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
     textChunkLimit: 4000,
     sendText: async ({ to, text, accountId }) => {
       const aid = accountId ?? "default";
+      console.log(
+        `[nostr-nip29:outbound] sendText called — to=${to} accountId=${aid} textLen=${text?.length ?? 0}`,
+      );
       const handle = activeHandles.get(aid);
       if (!handle) {
         throw new Error(`NIP-29 relay not connected for account ${aid}`);
@@ -81,7 +85,13 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
         throw new Error(`NIP-29 outbound only supports group targets, got: ${to}`);
       }
       const groupId = to.slice("group:".length);
+      console.log(
+        `[nostr-nip29:outbound] Publishing kind 9 to group=${groupId}`,
+      );
       await handle.sendGroupMessage(groupId, text ?? "");
+      console.log(
+        `[nostr-nip29:outbound] Published successfully to group=${groupId}`,
+      );
       return {
         channel: "nostr-nip29" as const,
         to,
@@ -111,7 +121,13 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
       }
 
       const groupIds = account.groups.map((g) => g.id);
-      const runtime = ctx.runtime as any;
+
+      // Use PluginRuntime from api.runtime (stored at register time),
+      // NOT ctx.runtime (RuntimeEnv).  The PluginRuntime carries the
+      // channel-reply dispatch layer that routes agent replies back
+      // through our outbound adapter.  ctx.runtime lacks this and
+      // causes replies to fall through to the default channel.
+      const pluginRuntime = getPluginRuntime();
 
       const handle = await connectRelay({
         relayUrl: account.relay,
@@ -155,8 +171,17 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
             `[${aid}] Inbound from ${event.pubkey.slice(0, 8)} in group ${groupId}`,
           );
 
-          // Forward to OpenClaw message pipeline
-          await runtime.channel?.reply?.handleInboundMessage?.({
+          // Forward to OpenClaw message pipeline via PluginRuntime.
+          // Must use pluginRuntime.channel.reply (not ctx.runtime) so
+          // the reply routes through our outbound adapter.
+          ctx.log?.debug?.(
+            `[${aid}] Dispatching to handleInboundMessage: channel=nostr-nip29 chatId=group:${groupId} sender=${event.pubkey.slice(0, 8)}`,
+          );
+          await (
+            pluginRuntime.channel.reply as {
+              handleInboundMessage?: (params: unknown) => Promise<void>;
+            }
+          ).handleInboundMessage?.({
             channel: "nostr-nip29",
             accountId: aid,
             senderId: event.pubkey,
@@ -164,6 +189,9 @@ export const nostrNip29Plugin: ChannelPlugin<NostrNip29Account> = {
             chatId: `group:${groupId}`,
             text,
             reply: async (responseText: string) => {
+              ctx.log?.debug?.(
+                `[${aid}] Reply callback invoked for group ${groupId} (${responseText.length} chars)`,
+              );
               await handle.sendGroupMessage(groupId, responseText);
             },
           });
