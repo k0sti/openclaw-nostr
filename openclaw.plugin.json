@@ -1,0 +1,13 @@
+{
+  "id": "nostr-nip29",
+  "name": "Nostr NIP-29",
+  "version": "0.1.0",
+  "description": "NIP-29 group chat channel for Nostr relays",
+  "main": "index.ts",
+  "channels": ["nostr-nip29"],
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@openclaw/nostr-nip29",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "nostr-tools": "^2.11.0"
+  },
+  "devDependencies": {
+    "openclaw": "latest",
+    "@types/bun": "latest"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "nostr-nip29",
+      "label": "Nostr NIP-29",
+      "selectionLabel": "Nostr NIP-29 Group Chats",
+      "blurb": "NIP-29 group chat channel for Nostr relays.",
+      "order": 55,
+      "configSchema": "empty"
+    }
+  }
+}
