@@ -27,7 +27,7 @@ export interface MentionResult {
   broadcast: boolean;
 }
 
-const NOSTR_URI_REGEX = /nostr:(nprofile|npub)1[a-z0-9]+/gi;
+const NOSTR_URI_REGEX = /(?:nostr:)?(nprofile|npub)1[a-z0-9]+/gi;
 
 /** Check if an event mentions the bot */
 export function checkMention(params: MentionCheckParams): MentionResult {
