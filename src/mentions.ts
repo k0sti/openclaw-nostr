@@ -24,6 +24,7 @@ export interface MentionResult {
   textHex: boolean;
   textBech32: boolean;
   name: boolean;
+  broadcast: boolean;
 }
 
 const NOSTR_URI_REGEX = /nostr:(nprofile|npub)1[a-z0-9]+/gi;
@@ -67,11 +68,16 @@ export function checkMention(params: MentionCheckParams): MentionResult {
   // 4. name check (case-insensitive)
   const name = botName ? text.toLowerCase().includes(botName.toLowerCase()) : false;
 
+  // 5. broadcast keywords (@all, @everyone)
+  const lower = text.toLowerCase();
+  const broadcast = lower.includes("@all") || lower.includes("@everyone");
+
   return {
-    mentioned: pTag || textHex || textBech32 || name,
+    mentioned: pTag || textHex || textBech32 || name || broadcast,
     pTag,
     textHex,
     textBech32,
     name,
+    broadcast,
   };
 }
