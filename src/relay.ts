@@ -34,7 +34,7 @@ export interface RelayHandle {
   publicKey: string;
   close: () => void;
   publish: (event: Event) => Promise<void>;
-  sendGroupMessage: (groupId: string, text: string) => Promise<Event>;
+  sendGroupMessage: (groupId: string, text: string, mentions?: string[]) => Promise<Event>;
 }
 
 /** Decode nsec to raw secret key bytes */
@@ -116,12 +116,18 @@ export async function connectRelay(opts: RelayOptions): Promise<RelayHandle> {
     },
   );
 
-  const sendGroupMessage = async (groupId: string, text: string): Promise<Event> => {
+  const sendGroupMessage = async (groupId: string, text: string, mentions?: string[]): Promise<Event> => {
+    const tags: string[][] = [["h", groupId]];
+    if (mentions) {
+      for (const pubkey of mentions) {
+        tags.push(["p", pubkey]);
+      }
+    }
     const event = finalizeEvent(
       {
         kind: KIND_GROUP_CHAT,
         content: text,
-        tags: [["h", groupId]],
+        tags,
         created_at: Math.floor(Date.now() / 1000),
       },
       sk,
